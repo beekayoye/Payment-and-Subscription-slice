@@ -1,0 +1,14 @@
+.next
+node_modules
+prisma/migrations
+src/generated
+
+# Prettier is scoped to the Next.js app only (package.json, config files,
+# /src, /prisma, /tests) — not project documentation or pre-existing
+# non-app assets, which this project's own formatting doesn't govern.
+AGENTS.md
+Docs/
+.agents/
+design-tokens.css
+design-tokens.tokens.json
+design-tokens-to-css.js

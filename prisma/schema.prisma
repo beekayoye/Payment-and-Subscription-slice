@@ -1,0 +1,132 @@
+// Subscription System — Prisma schema with full User Auth model
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                  String        @id @default(cuid())
+  email               String        @unique
+  name                String
+  passwordHash        String
+  emailVerified       Boolean       @default(false)
+  verificationCode    String?
+  verificationExpires DateTime?
+  resetToken          String?
+  resetExpires        DateTime?
+
+  subscription        Subscription?
+  paymentEvents       PaymentEvent[]
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([email])
+}
+
+enum PlanTier {
+  FREE
+  PRO
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE // checkout initiated, not yet confirmed by webhook
+  ACTIVE
+  CANCEL_SCHEDULED // cancelAtPeriodEnd = true, still has access
+  CANCELED
+  PAST_DUE // renewal payment failed; recorded, not acted on (see N4)
+}
+
+enum CancellationReason {
+  TOO_EXPENSIVE
+  MISSING_FEATURES
+  SWITCHING_PROVIDER
+  NOT_USING_ENOUGH
+  TEMPORARY_PAUSE
+  OTHER
+}
+
+enum PaymentEventType {
+  INITIATION
+  VERIFICATION
+  FULFILLMENT
+  FAILURE
+}
+
+enum PaymentProvider {
+  FLUTTERWAVE
+}
+
+model Subscription {
+  id       String             @id @default(cuid())
+  userId   String             @unique
+  user     User?              @relation(fields: [userId], references: [id])
+  plan     PlanTier           @default(FREE)
+  interval BillingInterval?
+  status   SubscriptionStatus @default(INCOMPLETE)
+
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  cancelAtPeriodEnd       Boolean             @default(false)
+  cancellationReason      CancellationReason?
+  cancellationReasonOther String?
+
+  pendingInterval    BillingInterval?
+  pendingEffectiveAt DateTime?
+
+  flutterwaveCustomerEmail  String
+  flutterwaveSubscriptionId String? @unique
+
+  paymentEvents PaymentEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([flutterwaveCustomerEmail])
+}
+
+model PaymentEvent {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User?         @relation(fields: [userId], references: [id])
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  eventType PaymentEventType
+  provider  PaymentProvider  @default(FLUTTERWAVE)
+
+  providerReference String
+  providerEventId   String? @unique
+
+  amount   Int // minor units (e.g. kobo, cents) — never a float or decimal
+  currency String // ISO 4217, e.g. "usd", "ngn"
+  status   String // raw provider status string, e.g. "successful", "failed"
+
+  rawPayload Json
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([provider, providerReference])
+}
+
+model RateLimitBucket {
+  id          String   @id @default(cuid())
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@unique([key, windowStart])
+  @@index([key, windowStart])
+}
